@@ -14,6 +14,7 @@ namespace EnhancedBlockInfoDisplay
         public override void DeInit()
         {
             harmony.UnpatchAll(HarmonyID);
+            UIEnhancedBlockInfoDisplay.ResetCaches();
         }
 
         public override void Init()
