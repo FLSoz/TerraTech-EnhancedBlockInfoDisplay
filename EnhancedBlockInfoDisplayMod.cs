@@ -22,8 +22,6 @@ namespace EnhancedBlockInfoDisplay
         {
             harmony = new Harmony(HarmonyID);
             harmony.PatchAll();
-
-            CacheVanillaBlockInfo();
         }
 
         private void CacheVanillaBlockInfo()
@@ -39,6 +37,7 @@ namespace EnhancedBlockInfoDisplay
         // if using TTSMM, cache all this block info immediately
         public void LateInit()
         {
+            CacheVanillaBlockInfo();
             ModSessionInfo currSession = (ModSessionInfo)m_CurrentSession.GetValue(Singleton.Manager<ManMods>.inst);
             foreach (int blockID in currSession.BlockIDs.Keys)
             {

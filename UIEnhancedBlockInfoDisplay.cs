@@ -53,7 +53,7 @@ namespace EnhancedBlockInfoDisplay
                 }
                 if (this.m_DPS != null)
                 {
-                    this.m_DPS.text = data.DPS > 0 ? data.DPS.ToString() : "";
+                    this.m_DPS.text = data.DPS.ToString();
                 }
 
                 // weapon

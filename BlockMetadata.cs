@@ -234,8 +234,13 @@ namespace EnhancedBlockInfoDisplay
             if (gun != null)
             {
                 // Console.WriteLine("  Getting Gun stuff");
-                this.ShotBurstCount = 0;
-                int numBarrels = gun.GetComponentsInChildren<CannonBarrel>(true).Length;
+                CannonBarrel[] cannonBarrels = blockPrefab.gameObject.GetComponentsInChildren<CannonBarrel>(true);
+                int numBarrels = cannonBarrels.Length;
+                if (numBarrels == 0)
+                {
+                    Console.WriteLine($"FAILED TO GET BARREL COUNT FOR {blockPrefab.name} - 0 detected");
+                    numBarrels = 1;
+                }
                 if (gun.m_BurstShotCount > 0)
                 {
                     this.ShotBurstCount = gun.m_BurstShotCount;
@@ -249,7 +254,7 @@ namespace EnhancedBlockInfoDisplay
                     this.ShotBurstCount = 1;
                 }
 
-                float burstCooldown = (float)m_BurstCooldown.GetValue(gun);
+                float burstCooldown = Mathf.Max((float)m_BurstCooldown.GetValue(gun), 0.05f);
                 // highest fire rate will be once a frame - approx 1/20 s
                 shotCooldown = Mathf.Max((float)m_ShotCooldown.GetValue(gun) / numBarrels, 0.05f);
 
@@ -261,14 +266,18 @@ namespace EnhancedBlockInfoDisplay
                 {
                     int salvosBeforeBurst = Mathf.CeilToInt((float)gun.m_BurstShotCount / (float)salvoCount);
                     cycleShots = salvosBeforeBurst * salvoCount;
-                    cycleTime = (salvosBeforeBurst * shotCooldown) + burstCooldown;
+                    cycleTime = ((salvosBeforeBurst - 1) * shotCooldown) + burstCooldown;
                 }
                 else
                 {
                     cycleShots = salvoCount;
                     cycleTime = shotCooldown;
                 }
-                bulletsPerSecond = cycleShots / cycleTime;
+                bulletsPerSecond = (float)cycleShots / cycleTime;
+                if (bulletsPerSecond == 0.0f)
+                {
+                    Console.WriteLine($"FAILED TO GET SALVO COUNT FOR {blockPrefab.name} WITH {numBarrels} barrels, {shotCooldown} cooldown. Cycle time {cycleTime}, Cycle shots {cycleShots}");
+                }
                 // Console.WriteLine("  Got gun stuff");
             }
 
@@ -279,108 +288,110 @@ namespace EnhancedBlockInfoDisplay
                 // Console.WriteLine("  Getting FireData");
                 this.MuzzleVelocity = fireData.m_MuzzleVelocity;
                 this.HasRange = true;
+                bool isShotgun = false;
                 if (fireData is FireDataShotgun shotgunData)
                 {
                     // Console.WriteLine("  Is shotgun");
                     this.Range = shotgunData.m_ShotMaxRange;
+                    isShotgun = true;
                 }
-                else
+
+                WeaponRound bullet = fireData.m_BulletPrefab;
+
+                bool isBeam = false;
                 {
-                    WeaponRound bullet = fireData.m_BulletPrefab;
-
-                    bool isBeam = false;
+                    // do beam handling
+                    // Console.WriteLine("  Getting BeamWeapon stuff");
+                    // is beam?
+                    float maxRange = 0.0f;
+                    float dps = 0;
+                    foreach (CannonBarrel barrel in fireData.GetComponentsInChildren<CannonBarrel>(true))
                     {
-                        // do beam handling
-                        // Console.WriteLine("  Getting BeamWeapon stuff");
-                        // is beam?
-                        float maxRange = 0.0f;
-                        float dps = 0;
-                        foreach (CannonBarrel barrel in fireData.GetComponentsInChildren<CannonBarrel>(true))
+                        if (barrel != null && barrel.beamWeapon != null)
                         {
-                            if (barrel != null && barrel.beamWeapon != null)
+                            isBeam = true;
+                            maxRange = Mathf.Max(maxRange, barrel.beamWeapon.Range);
+                            int beamDPS = (int)m_BeamDPS.GetValue(barrel.beamWeapon);
+                            if (shotCooldown > 0.0f)
                             {
-                                isBeam = true;
-                                maxRange = Mathf.Max(maxRange, barrel.beamWeapon.Range);
-                                int beamDPS = (int)m_BeamDPS.GetValue(barrel.beamWeapon);
-                                if (shotCooldown > 0.0f)
+                                if (beamDPS < 0.0f)
                                 {
-                                    if (beamDPS < 0.0f)
-                                    {
-                                        // should only happen with laser mod
-                                        dps += -beamDPS * bulletsPerSecond;
-                                        break;
-                                    }
-                                    else
-                                    {
-                                        // somehow here without laser mod
-                                        float fadeOutTime = (float)m_BeamFadeOutTime.GetValue(barrel.beamWeapon);
-                                        float percentageActive = Mathf.Clamp01(fadeOutTime / shotCooldown);
-                                        dps += beamDPS * percentageActive;
-                                    }
+                                    // should only happen with laser mod
+                                    dps += -beamDPS * bulletsPerSecond;
+                                    break;
                                 }
-                                else {
-                                    dps += beamDPS;
+                                else
+                                {
+                                    // somehow here without laser mod
+                                    float fadeOutTime = (float)m_BeamFadeOutTime.GetValue(barrel.beamWeapon);
+                                    float percentageActive = Mathf.Clamp01(fadeOutTime / shotCooldown);
+                                    dps += beamDPS * percentageActive;
                                 }
                             }
-                        }
-                        if (isBeam)
-                        {
-                            if (dps > 0)
-                            {
-                                this.DPS = dps;
+                            else {
+                                dps += beamDPS;
                             }
-                            this.Range = maxRange;
                         }
-                        // Console.WriteLine("  Got BeamWeapon stuff");
                     }
-
-                    if (!isBeam && bullet != null)
+                    if (isBeam)
                     {
-                        if (bullet is Projectile projectile)
+                        this.DPS = dps;
+                        this.Range = maxRange;
+                    }
+                    // Console.WriteLine("  Got BeamWeapon stuff");
+                }
+
+                if (!isBeam && bullet != null)
+                {
+                    this.ProjectileDamage = (int)m_ProjectileDamage.GetValue(bullet);
+                    if (bullet is Projectile projectile)
+                    {
+                        // Console.WriteLine("  Getting Projectile stuff");
+                        this.HasProjectile = true;
+
+                        this.SeekingProjectile = projectile.SeekingProjectile != null;
+                        this.ProjectileHasGravity = (bool)m_ProjectileGravity.GetValue(projectile);
+                        Transform explosion = (Transform)m_Explosion.GetValue(projectile);
+                        if (explosion != null)
                         {
-                            // Console.WriteLine("  Getting Projectile stuff");
-                            this.HasProjectile = true;
-                            this.ProjectileDamage = (int)m_ProjectileDamage.GetValue(bullet);
-
-                            this.SeekingProjectile = projectile.SeekingProjectile != null;
-                            this.ProjectileHasGravity = (bool)m_ProjectileGravity.GetValue(projectile);
-                            Transform explosion = (Transform)m_Explosion.GetValue(projectile);
-                            if (explosion != null)
+                            Explosion actualExplosion = explosion.GetComponent<Explosion>();
+                            if (actualExplosion != null)
                             {
-                                Explosion actualExplosion = explosion.GetComponent<Explosion>();
-                                if (actualExplosion != null)
-                                {
-                                    // Console.WriteLine("  Getting Explosion stuff");
-                                    this.HasExplosion = true;
-                                    this.ExplosionDamage = actualExplosion.m_MaxDamageStrength;
-                                    this.ExplosionRadius = actualExplosion.m_EffectRadius;
-                                    this.ExplosionMaxEffectRadius = actualExplosion.m_EffectRadiusMaxStrength;
-                                    this.ExplosionDamageType = (ManDamage.DamageType)m_ExplosionDamageType.GetValue(actualExplosion);
-                                    // Console.WriteLine("  Got Explosion stuff");
-                                }
-                            }
-                            this.DPS = bulletsPerSecond * (this.ProjectileDamage + this.ExplosionDamage);
-
-                            float lifetime = (float)m_ProjectileLifetime.GetValue(projectile);
-                            if (lifetime > 0.0f)
-                            {
-                                // has lifetime
-                                this.Range = this.MuzzleVelocity * lifetime;
-                            }
-                            else if (this.ProjectileHasGravity)
-                            {
-                                this.Range = this.MuzzleVelocity * this.MuzzleVelocity / Physics.gravity.magnitude;
-                            }
-                            else
-                            {
-                                // infinite projectile?
-                                this.Range = Mathf.Infinity;
+                                // Console.WriteLine("  Getting Explosion stuff");
+                                this.HasExplosion = true;
+                                this.ExplosionDamage = actualExplosion.m_MaxDamageStrength;
+                                this.ExplosionRadius = actualExplosion.m_EffectRadius;
+                                this.ExplosionMaxEffectRadius = actualExplosion.m_EffectRadiusMaxStrength;
+                                this.ExplosionDamageType = (ManDamage.DamageType)m_ExplosionDamageType.GetValue(actualExplosion);
+                                // Console.WriteLine("  Got Explosion stuff");
                             }
                         }
-                        else
+                        this.DPS = bulletsPerSecond * (this.ProjectileDamage + this.ExplosionDamage);
+                        if (this.DPS == 0.0f)
                         {
-                            // Console.WriteLine($"????? NON-SHOTGUN, NON-PROJECTILE WEAPONROUND");
+                            Console.WriteLine($"DPS OF 0 FOR {blockPrefab.name} - bps {bulletsPerSecond}, proj damage {this.ProjectileDamage}, explosion damage {this.ExplosionDamage}");
                         }
+
+                        // calculate range
+                        this.Range = Mathf.Infinity;
+                        float lifetime = (float)m_ProjectileLifetime.GetValue(projectile);
+                        if (lifetime > 0.0f)
+                        {
+                            // has lifetime
+                            this.Range = Mathf.Min(this.Range, this.MuzzleVelocity * lifetime);
+                        }
+                        if (this.ProjectileHasGravity)
+                        {
+                            this.Range = Mathf.Min(this.Range, this.MuzzleVelocity * this.MuzzleVelocity / Physics.gravity.magnitude);
+                        }
+                    }
+                    else if (isShotgun)
+                    {
+                        this.DPS = bulletsPerSecond * this.ProjectileDamage;
+                    }
+                    else
+                    {
+                        Console.WriteLine($"????? NON-SHOTGUN, NON-PROJECTILE WEAPONROUND {blockPrefab.name}");
                     }
                 }
             }
