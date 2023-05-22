@@ -61,12 +61,17 @@ namespace EnhancedBlockInfoDisplay
         private static readonly FieldInfo m_VibroDPS = AccessTools.Field(typeof(ModuleVibroKnife), "m_DamagePerSecond");
 
         private static readonly FieldInfo m_GeneratorMultiplier = AccessTools.Field(typeof(ModuleItemConsume), "m_EnergyMultiplier");
+        private static readonly FieldInfo m_RecipeDurationMultiplier = AccessTools.Field(typeof(ModuleItemConsume), "m_DurationMultiplier");
         private static readonly FieldInfo m_GeneratorOutput = AccessTools.Field(typeof(ModuleEnergy), "m_OutputPerSecond");
 
         private static readonly FieldInfo m_RecipeListNames = AccessTools.Field(typeof(ModuleRecipeProvider), "m_RecipeListNames");
 
         private static readonly FieldInfo m_BurstCooldown = AccessTools.Field(typeof(ModuleWeaponGun), "m_BurstCooldown");
         private static readonly FieldInfo m_ShotCooldown = AccessTools.Field(typeof(ModuleWeaponGun), "m_ShotCooldown");
+
+        private static readonly FieldInfo m_BoosterForce = AccessTools.Field(typeof(BoosterJet), "m_Force");
+        private static readonly FieldInfo m_BoosterActivationDelay = AccessTools.Field(typeof(MissileProjectile), "m_BoosterActivationDelay");
+        private static readonly FieldInfo m_MaxBoosterLifetime = AccessTools.Field(typeof(MissileProjectile), "m_MaxBoosterLifetime");
 
         public BlockMetadata(TankBlock blockPrefab)
         {
@@ -124,6 +129,7 @@ namespace EnhancedBlockInfoDisplay
             {
                 ModuleItemConsume generator = blockPrefab.GetComponent<ModuleItemConsume>();
                 bool GenerateFromChunks = false;
+                float olasticEnergy = 0.0f;
                 if (generator != null)
                 {
                     ModuleRecipeProvider recipeProvider = blockPrefab.GetComponent<ModuleRecipeProvider>();
@@ -150,7 +156,17 @@ namespace EnhancedBlockInfoDisplay
                             if (recipe.m_OutputType == RecipeTable.Recipe.OutputType.Energy)
                             {
                                 GenerateFromChunks = true;
-                                break;
+                                if (recipe.m_InputItems.Length == 1)
+                                {
+                                    RecipeTable.Recipe.ItemSpec inputSpec = recipe.m_InputItems[0];
+                                    ItemTypeInfo input = inputSpec.m_Item;
+                                    if (input.ObjectType == ObjectTypes.Chunk && input.ItemType == (int) ChunkTypes.OlasticBrick)
+                                    {
+                                        // we found olastic brick burning
+                                        olasticEnergy = recipe.m_EnergyOutput / inputSpec.m_Quantity / (recipe.m_BuildTimeSeconds * (float)m_RecipeDurationMultiplier.GetValue(generator));
+                                        break;
+                                    }
+                                }
                             }
                         }
                     }
@@ -158,8 +174,8 @@ namespace EnhancedBlockInfoDisplay
 
                 if (GenerateFromChunks)
                 {
-                    this.EnergyGenerationTitle = "Furnace Efficiency";
-                    this.EnergyGeneration = (float)m_GeneratorMultiplier.GetValue(generator);
+                    this.EnergyGenerationTitle = "Olastic Energy/s";
+                    this.EnergyGeneration = olasticEnergy * (float)m_GeneratorMultiplier.GetValue(generator);
                 }
                 else
                 {
@@ -350,6 +366,24 @@ namespace EnhancedBlockInfoDisplay
                         this.HasProjectile = true;
 
                         this.SeekingProjectile = projectile.SeekingProjectile != null;
+
+                        // handle missiles
+                        bool firesForward = true;
+                        // ^ no good way to detect firing direction as of now
+                        float boosterForce = 0.0f;
+                        float boosterDuration = 0.0f;
+                        float boosterDelay = 0.0f;
+                        if (projectile is MissileProjectile missile)
+                        {
+                            BoosterJet[] boosters = missile.GetComponentsInChildren<BoosterJet>();
+                            foreach (BoosterJet booster in boosters)
+                            {
+                                boosterForce += (float)m_BoosterForce.GetValue(booster);
+                            }
+                            boosterDuration = (float)m_MaxBoosterLifetime.GetValue(missile);
+                            boosterDelay = (float)m_BoosterActivationDelay.GetValue(missile);
+                        }
+
                         this.ProjectileHasGravity = (bool)m_ProjectileGravity.GetValue(projectile);
                         Transform explosion = (Transform)m_Explosion.GetValue(projectile);
                         if (explosion != null)
@@ -357,13 +391,11 @@ namespace EnhancedBlockInfoDisplay
                             Explosion actualExplosion = explosion.GetComponent<Explosion>();
                             if (actualExplosion != null)
                             {
-                                // Console.WriteLine("  Getting Explosion stuff");
                                 this.HasExplosion = true;
                                 this.ExplosionDamage = actualExplosion.m_MaxDamageStrength;
                                 this.ExplosionRadius = actualExplosion.m_EffectRadius;
                                 this.ExplosionMaxEffectRadius = actualExplosion.m_EffectRadiusMaxStrength;
                                 this.ExplosionDamageType = (ManDamage.DamageType)m_ExplosionDamageType.GetValue(actualExplosion);
-                                // Console.WriteLine("  Got Explosion stuff");
                             }
                         }
                         this.DPS = bulletsPerSecond * (this.ProjectileDamage + this.ExplosionDamage);
@@ -378,9 +410,35 @@ namespace EnhancedBlockInfoDisplay
                         if (lifetime > 0.0f)
                         {
                             // has lifetime
-                            this.Range = Mathf.Min(this.Range, this.MuzzleVelocity * lifetime);
+                            float lifetimeBounded = this.MuzzleVelocity * lifetime;
+                            if (boosterForce > 0.0f)
+                            {
+                                // if has gravity, assume is vertical launch, not impact range
+                                float startVelocity = !firesForward ? 0.0f : this.MuzzleVelocity;
+                                float startDistance = startVelocity * boosterDelay;
+                                // this is hard set by Projectile OnPool
+                                float mass = 0.00123f;
+                                float acceleration = boosterForce / mass;
+                                float boostingTime = Mathf.Max(Mathf.Min(boosterDuration, lifetime - boosterDelay), 0.0f);
+                                float finalSpeed = acceleration * boostingTime + startVelocity;
+                                float acceleratedDistance = acceleration * boostingTime * boostingTime / 2 + startVelocity * boostingTime;
+                                float finalDistance = finalSpeed * Mathf.Max(0.0f, lifetime - (boosterDelay + boosterDuration));
+                                /* Console.WriteLine($"Getting missile range for {blockPrefab.name}");
+                                Console.WriteLine($"  booster delay {boosterDelay}");
+                                Console.WriteLine($"  booster force {boosterForce}");
+                                Console.WriteLine($"  missile mass {mass}");
+                                Console.WriteLine($"  acceleration {acceleration}");
+                                Console.WriteLine($"  boosting time {boostingTime}");
+                                Console.WriteLine($"  start distance {startDistance}");
+                                Console.WriteLine($"  accelerated distance {acceleratedDistance}");
+                                Console.WriteLine($"  final distance {finalDistance}");
+                                Console.WriteLine($"  lifetime {lifetime}"); */
+                                lifetimeBounded = startDistance + acceleratedDistance + finalDistance;
+                            }
+                            this.Range = Mathf.Min(this.Range, lifetimeBounded);
                         }
-                        if (this.ProjectileHasGravity)
+                        // if we are missile, then don't consider classical projectile kinematics
+                        if (this.ProjectileHasGravity && boosterForce <= 0.0f)
                         {
                             this.Range = Mathf.Min(this.Range, this.MuzzleVelocity * this.MuzzleVelocity / Physics.gravity.magnitude);
                         }
