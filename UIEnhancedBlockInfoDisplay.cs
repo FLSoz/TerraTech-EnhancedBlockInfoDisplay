@@ -27,7 +27,7 @@ namespace EnhancedBlockInfoDisplay
             }
             if (!metadataCache.TryGetValue(blockType, out BlockMetadata data))
             {
-                data = new BlockMetadata(blockPrefab);
+                data = new BlockMetadata(blockPrefab, blockType);
                 metadataCache[blockType] = data;
             }
             return data;
@@ -49,39 +49,39 @@ namespace EnhancedBlockInfoDisplay
                 if (this.m_HP != null)
                 {
                     int hp = data.MaxHP;
-                    this.m_HP.text = hp > 0 ? hp.ToString() : "";
+                    this.m_HP.text = hp > 0 ? hp.ToString("N0") : "";
                 }
                 if (this.m_DPS != null)
                 {
-                    this.m_DPS.text = data.DPS.ToString();
+                    this.m_DPS.text = data.DPS.ToString("N1");
                 }
 
                 // weapon
                 if (this.m_Range != null)
                 {
-                    this.m_Range.text = data.Range.ToString();
+                    this.m_Range.text = data.Range.ToString("N0");
                     SetCanvasGroupState(this.m_Range.transform.parent, data.HasRange);
                 }
                 if (this.m_MuzzleVelocity != null)
                 {
-                    this.m_MuzzleVelocity.text = data.MuzzleVelocity > 0.0f ? data.MuzzleVelocity.ToString() : "";
+                    this.m_MuzzleVelocity.text = data.MuzzleVelocity > 0.0f ? data.MuzzleVelocity.ToString("N1") : "";
                 }
 
                 // projectile
                 if (this.m_ShotDamage != null)
                 {
-                    this.m_ShotDamage.text = data.ProjectileDamage.ToString();
+                    this.m_ShotDamage.text = data.ProjectileDamage.ToString("N0");
                     SetCanvasGroupState(this.m_ShotDamage.transform.parent, data.HasProjectile);
                 }
                 if (this.m_ShotBurstCount != null)
                 {
-                    this.m_ShotBurstCount.text = data.ShotBurstCount.ToString();
+                    this.m_ShotBurstCount.text = data.ShotBurstCount.ToString("N0");
                 }
 
                 // explosion
                 if (this.m_ExplosionDamage != null)
                 {
-                    this.m_ExplosionDamage.text = data.ExplosionDamage.ToString();
+                    this.m_ExplosionDamage.text = data.ExplosionDamage.ToString("N0");
                     SetCanvasGroupState(this.m_ExplosionDamage.transform.parent, data.HasExplosion);
                 }
                 if (this.m_ExplosionDamageType != null)
@@ -90,18 +90,18 @@ namespace EnhancedBlockInfoDisplay
                 }
                 if (this.m_ExplosionRadius != null)
                 {
-                    this.m_ExplosionRadius.text = data.ExplosionRadius.ToString();
+                    this.m_ExplosionRadius.text = data.ExplosionRadius.ToString("N1");
                     SetCanvasGroupState(this.m_ExplosionRadius.transform.parent, data.HasExplosion);
                 }
                 if (this.m_ExplosionMaxRadius != null)
                 {
-                    this.m_ExplosionMaxRadius.text = data.ExplosionMaxEffectRadius.ToString();
+                    this.m_ExplosionMaxRadius.text = data.ExplosionMaxEffectRadius.ToString("N1");
                 }
 
                 // radar
                 if (this.m_RadarRange != null)
                 {
-                    this.m_RadarRange.text = data.RadarRange.ToString();
+                    this.m_RadarRange.text = data.RadarRange.ToString("N0");
                     SetCanvasGroupState(this.m_RadarRange.transform.parent, data.HasRadar);
                 }
                 if (this.m_RadarType != null)
@@ -112,12 +112,12 @@ namespace EnhancedBlockInfoDisplay
                 // battery
                 if (this.m_EnergyCapacity != null)
                 {
-                    this.m_EnergyCapacity.text = data.EnergyCapacity.ToString();
+                    this.m_EnergyCapacity.text = data.EnergyCapacity.ToString("N1");
                     SetCanvasGroupState(this.m_EnergyCapacity.transform.parent, data.HasEnergy);
                 }
                 if (this.m_EnergyGeneration != null)
                 {
-                    this.m_EnergyGeneration.text = data.EnergyGeneration.ToString();
+                    this.m_EnergyGeneration.text = data.EnergyGeneration.ToString("N1");
                 }
                 if (this.m_EnergyGenerationTitle != null)
                 {
@@ -128,20 +128,85 @@ namespace EnhancedBlockInfoDisplay
                 // row 1
                 if (this.m_ShieldEnergyPerDamage != null)
                 {
-                    this.m_ShieldEnergyPerDamage.text = data.ShieldEnergyPerDamage.ToString();
+                    this.m_ShieldEnergyPerDamage.text = data.ShieldEnergyPerDamage.ToString("N1");
                     SetCanvasGroupState(this.m_ShieldEnergyPerDamage.transform.parent, data.HasShield);
                 }
                 if (this.m_ShieldEnergyPerHealed != null) {
-                    this.m_ShieldEnergyPerHealed.text = data.ShieldEnergyPerHealed.ToString();
+                    this.m_ShieldEnergyPerHealed.text = data.ShieldEnergyPerHealed.ToString("N1");
                 }
                 // row 2
                 if (this.m_ShieldPassiveDrain != null)
                 {
-                    this.m_ShieldPassiveDrain.text = data.ShieldPassiveDrain.ToString();
+                    this.m_ShieldPassiveDrain.text = data.ShieldPassiveDrain.ToString("N1");
                     SetCanvasGroupState(this.m_ShieldPassiveDrain.transform.parent, data.HasShield);
                 }
                 if (this.m_ShieldStartupDrain != null) {
-                    this.m_ShieldStartupDrain.text = data.ShieldStartupDrain.ToString();
+                    this.m_ShieldStartupDrain.text = data.ShieldStartupDrain.ToString("N1");
+                }
+
+                // fan
+                if (this.m_FanForce != null) {
+                    SetCanvasGroupState(this.m_FanForce.transform.parent, data.HasFan);
+                    string text = "";
+                    if (data.HasFan)
+                    {
+                        if (data.MultiAxisFan)
+                        {
+                            text = $"x: {(-data.FanX.y).ToString("N0")} / -{data.FanX.x.ToString("N0")}\n" +
+                                $"y: {(-data.FanY.y).ToString("N0")} / -{data.FanY.x.ToString("N0")}\n" +
+                                $"z: {(-data.FanZ.y).ToString("N0")} / -{data.FanZ.x.ToString("N0")}";
+                        }
+                        else if (data.FanForce != 0.0f)
+                        {
+                            text = data.FanForce.ToString("N0");
+                        }
+                        else
+                        {
+                            text = $"{(-data.MaxFan.y).ToString("N0")} / -{data.MaxFan.x.ToString("N0")}";
+                        }
+                    }
+                    else
+                    {
+                        text = "";
+                    }
+                    this.m_FanForce.text = text;
+                }
+                if (this.m_FanEfficiency != null)
+                {
+                    this.m_FanEfficiency.text = data.FanEfficiency.ToString("N2");
+                }
+
+                // booster
+                if (this.m_BoosterForce != null)
+                {
+                    SetCanvasGroupState(this.m_BoosterForce.transform.parent, data.HasBooster);
+                    string text = "";
+                    if (data.HasBooster)
+                    {
+                        if (data.MultiAxisBooster)
+                        {
+                            text = $"x: {(-data.BoosterX.y).ToString("N0")} / -{data.BoosterX.x.ToString("N0")}\n" +
+                                $"y: {(-data.BoosterY.y).ToString("N0")} / -{data.BoosterY.x.ToString("N0")}\n" +
+                                $"z: {(-data.BoosterZ.y).ToString("N0")} / -{data.BoosterZ.x.ToString("N0")}";
+                        }
+                        else if (data.BoosterForce != 0.0f)
+                        {
+                            text = data.BoosterForce.ToString("N0");
+                        }
+                        else
+                        {
+                            text = $"{(-data.MaxBooster.y).ToString("N0")} / -{data.MaxBooster.x.ToString("N0")}";
+                        }
+                    }
+                    else
+                    {
+                        text = "";
+                    }
+                    this.m_BoosterForce.text = text;
+                }
+                if (this.m_BoosterFuelRate != null)
+                {
+                    this.m_BoosterFuelRate.text = data.BoosterBurnsFuel ? data.BoosterFuelBurn.ToString("N1") : "";
                 }
             }
         }
@@ -266,6 +331,12 @@ namespace EnhancedBlockInfoDisplay
         private TextMeshProUGUI m_ShieldEnergyPerHealed;
         private TextMeshProUGUI m_ShieldStartupDrain;
         private TextMeshProUGUI m_ShieldPassiveDrain;
+
+        private TextMeshProUGUI m_FanForce;
+        private TextMeshProUGUI m_FanEfficiency;
+
+        private TextMeshProUGUI m_BoosterForce;
+        private TextMeshProUGUI m_BoosterFuelRate;
 
         private static void SetSameParent(Transform newTrans, Transform sourceTrans)
         {
@@ -432,6 +503,19 @@ namespace EnhancedBlockInfoDisplay
             // Add shield
             AddRow("Energy/DMG", "Energy/HP", out this.m_ShieldEnergyPerDamage, out this.m_ShieldEnergyPerHealed);
             AddRow("Startup Energy", "Bubble Energy/s", out this.m_ShieldStartupDrain, out this.m_ShieldPassiveDrain);
+
+            // Add fan
+            float forceScale = 1.5f;
+            AddRow("Fan Force", "Lift Efficiency (N/cell)", out this.m_FanForce, out this.m_FanEfficiency);
+            Vector3 forceTransformScale = this.m_FanForce.transform.localScale;
+            // this.m_FanForce.transform.localScale = new Vector3(forceTransformScale.x * forceScale, forceTransformScale.y, forceTransformScale.z);
+            this.m_FanForce.transform.localPosition -= Vector3.Scale(this.m_FanForce.transform.localPosition, (forceScale - 1) * Vector3.right);
+
+            // Add booster
+            AddRow("Booster Force", "Fuel/s", out this.m_BoosterForce, out this.m_BoosterFuelRate);
+            forceTransformScale = this.m_BoosterForce.transform.localScale;
+            // this.m_BoosterForce.transform.localScale = new Vector3(forceTransformScale.x * forceScale, forceTransformScale.y, forceTransformScale.z);
+            this.m_BoosterForce.transform.localPosition -= Vector3.Scale(this.m_BoosterForce.transform.localPosition, (forceScale - 1) * Vector3.right);
 
             // set description to be last
             if (this.m_DescriptionText != null)
